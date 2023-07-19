@@ -1,7 +1,9 @@
 const express = require('express')
 const app = express()
+const morgan = require('morgan')
 
 app.use(express.json())
+app.use(morgan('tiny'))
 
 let phonebook = [
   { 
@@ -79,6 +81,7 @@ app.post('/api/persons', (req, res) => {
   phonebook = phonebook.concat(person)
 
   res.json(phonebook)
+  // app.use(morgan('dev'))
 })
 
 app.delete('/api/persons/:id', (req, res) => {
