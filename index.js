@@ -2,38 +2,38 @@ const express = require('express')
 const app = express()
 const morgan = require('morgan')
 const cors = require('cors')
+require('dotenv').config()
 
-app.use(cors())
+const People = require('./models/note')
+
+app.use(express.static('build'))
 app.use(express.json())
 app.use(morgan('tiny'))
-app.use(express.static('build'))
+app.use(cors())
 
-let phonebook = [
-  { 
-    "id": 1,
-    "name": "Arto Hellas", 
-    "number": "040-123456"
-  },
-  { 
-    "id": 2,
-    "name": "Ada Lovelace", 
-    "number": "39-44-5323523"
-  },
-  { 
-    "id": 3,
-    "name": "Dan Abramov", 
-    "number": "12-43-234345"
-  },
-  { 
-    "id": 4,
-    "name": "Mary Poppendieck", 
-    "number": "39-23-6423122"
+const errorHandler = (error, req, res, next) => {
+  console.error(error.message)
+
+  if (error.name === 'CastError') {
+    return res.status(400).send({ error: 'malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return res.status(400).json({ error: error.message })
   }
-]
+
+  next(error)
+}
+
+const unknownEndpoint = (req, res,) => {
+  res.status(404).send( {error: 'unkown endpoint'})
+}
+
+let phonebook = []
 
 app.get('/api/persons', (req, res) => {
-  res.json(phonebook)
-})
+  People.find({}).then(person => {
+    res.json(person)
+  })
+}) 
 
 app.get('/info', (req, res) => {
   const listNumber = phonebook.length
@@ -43,22 +43,19 @@ app.get('/info', (req, res) => {
   res.send(`${text} <br/><br/> ${date}`)
 })
 
-app.get('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id)
-  const person = phonebook.find(x => x.id === id)
-
-  if (person) {
-    res.json(person)
-  } else {
-    res.status(404).end()
-  }
+app.get('/api/persons/:id', (req, res, next) => {
+  People.findById(req.params.id)
+    .then(person => {
+      if (person) {
+        res.json(person)
+      } else {
+        res.status(404).end()
+      }
+    })
+    .catch(error => next(error))
 })
 
-const randomId = (max) => {
-  return Math.floor(Math.random() * max)
-}
-
-app.post('/api/persons', (req, res) => {
+app.post('/api/persons', (req, res, next) => {
   const body = req.body
 
   if (!body.name || !body.number ) {
@@ -67,36 +64,47 @@ app.post('/api/persons', (req, res) => {
     })
   }
 
-  const names = phonebook.map(x => x.name.toLowerCase())
-
-  if (names.includes(body.name.toLowerCase())) {
-    return res.status(400).json({
-      error: 'Name must be Unique'
-    })
-  }
-
-  const person = {
-    id: randomId(1000000),
+  const person = new People({
     name: body.name,
     number: body.number,
+  })
+
+  person.save().then(savedPerson => {
+    res.json(savedPerson)
+  })
+  .catch(error => {
+    next(error)
+  })
+})
+
+app.delete('/api/persons/:id', (req, res, next) => {
+  People.findByIdAndRemove(req.params.id)
+    .then(result => {
+      res.status(204).end()
+    })
+    .catch(error => next(error))
+})
+
+app.put('/api/persons/:id', (req, res, next) => {
+  const body = req.body
+
+  const person = {
+    number: body.number
   }
 
-  phonebook = phonebook.concat(person)
-
-  res.json(phonebook)
-  // app.use(morgan('dev'))
+  People.findByIdAndUpdate(req.params.id, person, {number: body.number})
+    .then(updatedPerson => {
+      res.json(updatedPerson)
+    })
+    .catch(error => next(error))
 })
 
-app.delete('/api/persons/:id', (req, res) => {
-  const id = Number(req.params.id)
-  person = phonebook.filter(x => x.id !== id)
+app.use(unknownEndpoint)
 
-  res.status(204).end()
-})
-
-const PORT = process.env.PORT || 3001
+const PORT = process.env.PORT
 app.listen(PORT)
 console.log(`Server running on port ${PORT}`);
 
+app.use(errorHandler)
+
 //npm run dev
-//3.7 ka na brods
